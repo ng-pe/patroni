@@ -159,7 +159,7 @@ def validate_host_port(host_port: str, listen: bool = False, multiple_hosts: boo
                 family = socket.AF_INET # IPV4 Only
                 
             # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
-            hosts = [a[4][0] for a in socket.getaddrinfo(None, port, 0, socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
+            hosts = [a[4][0] for a in socket.getaddrinfo(None, port, 0, socket.SOCK_STREAM, family, socket.AI_PASSIVE)
                      if isinstance(a[4][0], str)]
         for host in hosts:
             # Check if "socket.IF_INET" or "socket.IF_INET6" is being used and instantiate a socket with the identified
