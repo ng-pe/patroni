@@ -105,7 +105,16 @@ def validate_connect_address(address: str) -> bool:
         raise ConfigParseError('must not contain "127.0.0.1", "0.0.0.0", "*", "::1", "localhost"')
     return True
 
-
+def is_ipv6_available() -> bool:
+    """Check if IPV6 is available on system
+    """
+    
+    try:
+        socket.socket(socket.AF_INET6, socket.SOCK_STREAM).close()
+        return True
+    except (socket.error, OSError):
+        return False
+        
 def validate_host_port(host_port: str, listen: bool = False, multiple_hosts: bool = False) -> bool:
     """Check if host(s) and port are valid and available for usage.
 
@@ -143,13 +152,19 @@ def validate_host_port(host_port: str, listen: bool = False, multiple_hosts: boo
         if "*" in hosts:
             if len(hosts) != 1:
                 raise ConfigParseError("expecting '*' alone")
+            # prevente error 97 on disabled IVP6 system
+            if is_ipv6_available():
+                family = 0  # IPv4 and IPv6
+            else:
+                family = socket.AF_INET # IPV4 Only
+                
             # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
             hosts = [a[4][0] for a in socket.getaddrinfo(None, port, 0, socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
                      if isinstance(a[4][0], str)]
         for host in hosts:
             # Check if "socket.IF_INET" or "socket.IF_INET6" is being used and instantiate a socket with the identified
             # protocol
-            proto = socket.getaddrinfo(host, None, 0, socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
+            proto = socket.getaddrinfo(host, None, 0, socket.SOCK_STREAM, family, socket.AI_PASSIVE)
             s = socket.socket(proto[0][0], socket.SOCK_STREAM)
             try:
                 if s.connect_ex((host, port)) == 0:
