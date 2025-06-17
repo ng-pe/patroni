@@ -147,15 +147,14 @@ def validate_host_port(host_port: str, listen: bool = False, multiple_hosts: boo
             hosts = hosts.split(",")
         else:
             hosts = [hosts]
+        family = 0
 
         # If host is set to "*" get all hostnames and/or IP addresses that the host would be able to listen to
         if "*" in hosts:
             if len(hosts) != 1:
                 raise ConfigParseError("expecting '*' alone")
             # prevente error 97 on disabled IVP6 system
-            if is_ipv6_available():
-                family = 0  # IPv4 and IPv6
-            else:
+            if not is_ipv6_available():
                 family = socket.AF_INET # IPV4 Only
                 
             # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
