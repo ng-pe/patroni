@@ -23,7 +23,7 @@ from .exceptions import PatroniException
 from .log import PatroniLogger
 from .postgresql.config import ConfigHandler, parse_dsn
 from .postgresql.misc import postgres_major_version_to_int
-from .utils import get_major_version, parse_bool, patch_config, read_stripped
+from .utils import get_major_version, parse_bool, patch_config, read_stripped, get_network_address
 
 # Mapping between the libpq connection parameters and the environment variables.
 # This dict should be kept in sync with `patroni.utils._AUTH_ALLOWED_PARAMETERS`

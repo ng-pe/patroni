@@ -798,6 +798,74 @@ def polling_loop(timeout: Union[int, float], interval: Union[int, float] = 1) ->
         iteration += 1
         time.sleep(float(interval))
 
+def has_dual_stack() -> bool:
+    """Check if the system has support for dual stack (IPV4+IPV6) sockets.
+
+    :returns: ``True`` if it has support for dual stack sockets
+    """
+    if not getattr(socket, 'has_ipv6', False):
+        logger.debug("IPv6 not available on this system")
+        return False
+
+    required_socket_attrs = ['AF_INET6', 'IPPROTO_IPV6', 'IPV6_V6ONLY']
+    missing_attrs = [attr for attr in required_socket_attrs if not hasattr(socket, attr)]
+    if missing_attrs:
+        logger.debug("Missing socket attributes for dual stack: %s", missing_attrs)
+        logger.debug("Python is compiled with ipv6 support? Perhaps with --disable-ipv6 compilation flag?")
+        logger.debug("IPv6 completely unavailable in this Python installation...")
+        return False
+
+    try:
+        with closing(socket.socket(socket.AF_INET6, socket.SOCK_STREAM)) as sock:
+            # Try to deactivate IPV6_V6ONLY -> activate dual stack
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
+            ipv6only_result = sock.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY)
+            if ipv6only_result != 0:
+                logger.debug("IPV6_V6ONLY could not be disabled (value: %d)", ipv6only_result)
+                return False
+            return True
+    except OSError as e:
+        logger.debug('Error when working with ipv6 socket: %s', e)
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error testing dual stack support: %s", e)
+        return False
+
+def get_network_address(
+        hostname: Optional[str] = None,
+        port: Optional[int] = None
+) -> List[Tuple[int, str, int]]:
+    """Get network address information for the specified hostname and port.
+
+    Resolves the given hostname and port to a list of network addresses, supporting both IPv4 and IPv6
+    when dual-stack is available. Uses socket.getaddrinfo() to perform DNS resolution and returns
+    formatted address information suitable for network connections.
+
+    :param hostname: the hostname or IP address to resolve. If None, uses INADDR_ANY/IN6ADDR_ANY
+                    for server socket binding (AI_PASSIVE flag behavior).
+    :param port: the port number to use. If None, the port portion will be 0 in the returned tuples.
+    :returns: a list of tuples where each tuple contains (address_family, ip_address, port_number).
+             Address family is socket.AF_INET for IPv4 or socket.AF_INET6 for IPv6.
+             Only includes IPv6 addresses if dual-stack networking is available, otherwise
+             filters to IPv4 only.
+
+    :Example:
+    >>> getNetworkAddress('localhost', 8080)
+    [(<AddressFamily.AF_INET: 2>, '127.0.0.1', 8080), (<AddressFamily.AF_INET6: 10, '::1', 8080)]
+    >>> getNetworkAddress('localhost', 8080)
+    [(<AddressFamily.AF_INET: 2>, '127.0.0.1', 8080)] # if not dualstack
+    >>> getNetworkAddress(None, 3000)
+    [(<AddressFamily.AF_INET: 2>, '0.0.0.0', 3000), (<AddressFamily.AF_INET6: 10>, '::', 3000)]
+    """
+
+    # check IPV6 available for dualstack (IPV4 + IPV6)
+    dual_stack_available = has_dual_stack()
+    # Tupple to return, IPV4 only if ipv6 not available
+    return [(a[0], a[4][0], a[4][1])
+                        for a in socket.getaddrinfo(
+            hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE
+        ) if isinstance(a[4][0], str) and isinstance(a[4][1], int) and (dual_stack_available or a[0] == socket.AF_INET)
+                        ]
 
 def split_host_port(value: str, default_port: Optional[int]) -> Tuple[str, int]:
     """Extract host(s) and port from *value*.

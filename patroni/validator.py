@@ -15,7 +15,7 @@ from .collections import CaseInsensitiveSet, EMPTY_DICT
 from .dcs import dcs_modules
 from .exceptions import ConfigParseError
 from .log import type_logformat
-from .utils import data_directory_is_empty, get_major_version, parse_int, split_host_port
+from .utils import data_directory_is_empty, get_major_version, parse_int, split_host_port, get_network_address
 
 # Additional parameters to fine-tune validation process
 _validation_params: Dict[str, Any] = {}
@@ -143,9 +143,9 @@ def validate_host_port(host_port: str, listen: bool = False, multiple_hosts: boo
         if "*" in hosts:
             if len(hosts) != 1:
                 raise ConfigParseError("expecting '*' alone")
-            # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
-            hosts = [a[4][0] for a in socket.getaddrinfo(None, port, 0, socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
-                     if isinstance(a[4][0], str)]
+            # Get adresses, if ipv6 not available get_network_address() return only ipv4 adresses :
+            hosts = [addr[1] for addr in get_network_address(port=port)]
+            
         for host in hosts:
             # Check if "socket.IF_INET" or "socket.IF_INET6" is being used and instantiate a socket with the identified
             # protocol

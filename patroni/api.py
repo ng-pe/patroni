@@ -32,7 +32,8 @@ from .dcs import Cluster
 from .exceptions import PostgresConnectionException, PostgresException
 from .postgresql.misc import postgres_version_to_int, PostgresqlRole, PostgresqlState
 from .utils import cluster_as_json, deep_compare, enable_keepalive, parse_bool, \
-    parse_int, patch_config, Retry, RetryFailedError, split_host_port, tzutc, uri
+    parse_int, patch_config, Retry, RetryFailedError, split_host_port, tzutc, uri, \
+    get_network_address
 
 logger = logging.getLogger(__name__)
 
@@ -1567,15 +1568,7 @@ class RestApiServer(ThreadingMixIn, HTTPServer, Thread):
         except Exception as e:
             logger.error('Failed to resolve %s: %r', host, e)
 
-    def __members_ips(self) -> Iterator[Union[IPv4Network, IPv6Network]]:
-        """Resolve each Patroni node ``restapi.connect_address`` to IP networks.
-
-        .. note::
-            Only yields object if ``restapi.allowlist_include_members`` setting is enabled.
-
-        :yields: each node ``restapi.connect_address`` resolved to an IP network.
-        """
-        cluster = self.patroni.dcs.cluster
+    def __members_ips(self) -> Iteratoget_network_address
         if self.__allowlist_include_members and cluster:
             for cluster in [cluster] + list(cluster.workers.values()):
                 for member in cluster.members:
@@ -1625,24 +1618,6 @@ class RestApiServer(ThreadingMixIn, HTTPServer, Thread):
             return rh.write_response(401, reason, headers=headers)
         return True
 
-    @staticmethod
-    def __has_dual_stack() -> bool:
-        """Check if the system has support for dual stack sockets.
-
-        :returns: ``True`` if it has support for dual stack sockets.
-        """
-        if hasattr(socket, 'AF_INET6') and hasattr(socket, 'IPPROTO_IPV6') and hasattr(socket, 'IPV6_V6ONLY'):
-            sock = None
-            try:
-                sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
-                return True
-            except socket.error as e:
-                logger.debug('Error when working with ipv6 socket: %s', e)
-            finally:
-                if sock:
-                    sock.close()
-        return False
 
     def __httpserver_init(self, host: str, port: int) -> None:
         """Start REST API HTTP server.
@@ -1653,18 +1628,13 @@ class RestApiServer(ThreadingMixIn, HTTPServer, Thread):
         :param host: host to bind REST API to.
         :param port: port to bind REST API to.
         """
-        dual_stack = self.__has_dual_stack()
+        
         hostname = host
         if hostname in ('', '*'):
             hostname = None
 
-        # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
-        info = [(a[0], a[4][0], a[4][1])
-                for a in socket.getaddrinfo(hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
-                if isinstance(a[4][0], str) and isinstance(a[4][1], int)]
-        # in case dual stack is not supported we want IPv4 to be preferred over IPv6
-        info.sort(key=lambda x: x[0] == socket.AF_INET, reverse=not dual_stack)
-
+        info = get_network_address(hostname=hostname, port=port)
+        
         self.address_family = info[0][0]
         try:
             HTTPServer.__init__(self, (info[0][1], info[0][2]), RestApiHandler)

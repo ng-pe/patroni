@@ -592,12 +592,13 @@ class ConfigHandler(object):
         # when we are doing custom bootstrap we assume that we don't know superuser password
         # and in order to be able to change it, we are opening trust access from a certain address
         if self._postgresql.bootstrap.running_custom_bootstrap:
+            # WIP : bugfix if IPV6 adresse not /32 mask but /128
             addresses = {} if os.name == 'nt' else {'': 'local'}  # windows doesn't yet support unix-domain sockets
             if 'host' in self.local_replication_address and not self.local_replication_address['host'].startswith('/'):
-                addresses.update({sa[0] + '/32': 'host' for _, _, _, _, sa in socket.getaddrinfo(
-                                  self.local_replication_address['host'], self.local_replication_address['port'],
-                                  0, socket.SOCK_STREAM, socket.IPPROTO_TCP) if isinstance(sa[0], str)})
-                # Filter out unexpected results when python is compiled with --disable-ipv6 and running on IPv6 system.
+                addresses.update({sa[0] + ('/32' if family == socket.AF_INET else '/128'): 'host' 
+                for family, _, _, _, sa in socket.getaddrinfo(local_replication_address['host'],
+                        local_replication_address['port'], socket.AF_UNSPEC, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+                        if isinstance(sa[0], str)})
 
             with self.config_writer(self._pg_hba_conf) as f:
                 for address, t in addresses.items():
