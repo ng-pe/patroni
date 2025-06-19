@@ -1568,7 +1568,15 @@ class RestApiServer(ThreadingMixIn, HTTPServer, Thread):
         except Exception as e:
             logger.error('Failed to resolve %s: %r', host, e)
 
-    def __members_ips(self) -> Iteratoget_network_address
+    def __members_ips(self) -> Iterator[Union[IPv4Network, IPv6Network]]:
+        """Resolve each Patroni node ``restapi.connect_address`` to IP networks.
+
+        .. note::
+            Only yields object if ``restapi.allowlist_include_members`` setting is enabled.
+
+        :yields: each node ``restapi.connect_address`` resolved to an IP network.
+        """
+        cluster = self.patroni.dcs.cluster
         if self.__allowlist_include_members and cluster:
             for cluster in [cluster] + list(cluster.workers.values()):
                 for member in cluster.members:
